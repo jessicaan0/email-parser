@@ -115,12 +115,12 @@ class Program
                 string outputPath = Path.Combine(emailOutputDir, fileName + ".pdf");
 
                 // Save original attachments before the PDF service consumes (and then
-                // deletes) the temp files.  Attachments go into a folder named after
-                // the email subject (<emailOutputDir>/<subject>/) so each email thread
-                // gets its own clearly-labelled attachment folder alongside its PDF.
+                // deletes) the temp files.  Attachments go into a folder named
+                // "<subject> attachments" (e.g. "re: window enquiry attachments") so
+                // each email thread gets its own clearly-labelled attachment folder.
                 if (email.Attachments.Count > 0)
                 {
-                    string attachmentsDir = Path.Combine(emailOutputDir, fileName);
+                    string attachmentsDir = Path.Combine(emailOutputDir, fileName + " attachments");
                     try
                     {
                         SaveAttachmentsToFolder(email, attachmentsDir);

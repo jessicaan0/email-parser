@@ -24,7 +24,7 @@ A C# console application for Windows that reads emails from a specified Outlook 
   | Excel | `.xls`, `.xlsx`, `.csv` | Converted via Excel (Office 365) |
   | ZIP | `.zip` | Extracted; each contained file processed recursively |
 - Output files are saved to `My Documents\EmailParser\<FolderName>\<Subject>.pdf`
-- Each email's attachments are saved in their **original format** in a folder named after the email subject, placed alongside the PDF — one folder per email thread
+- Each email's attachments are saved in their **original format** in a folder named `<subject> attachments` (e.g. `re: window enquiry attachments\`) placed alongside the PDF — one folder per email thread
 - ZIP attachments are extracted into a named subfolder inside the email's attachment folder
 - Input folder structures are fully preserved in the output — subdirectories in the source directory are mirrored in the output
 - Duplicate subject lines are handled by appending a counter, e.g. `Report (2).pdf`
@@ -108,15 +108,15 @@ My Documents\
   EmailParser\
     inbox\
       Meeting agenda.pdf
-      Meeting agenda\         ← attachment folder named after email subject
+      Meeting agenda attachments\   ← "<subject> attachments" folder
         presentation.pptx
-        data\                 ← extracted from data.zip
+        data\                       ← extracted from data.zip
           report.docx
       Project status update.pdf
-                              ← no folder created (no attachments)
-      subfolder\              ← mirrors input subfolder structure
+                                    ← no folder created (no attachments)
+      subfolder\                    ← mirrors input subfolder structure
         Q1 Budget Review.pdf
-        Q1 Budget Review\     ← attachment folder named after email subject
+        Q1 Budget Review attachments\
           budget.xlsx
 ```
 
@@ -127,4 +127,4 @@ My Documents\
 - Nested ZIP files are extracted and processed recursively.
 - If an individual email fails to convert, the error is reported and processing continues with the remaining emails.
 - When running in `.msg` directory mode the tool searches **all subdirectories** recursively and replicates the source folder hierarchy in the output directory.
-- Each email's attachments are saved in their original format in a folder **named after the email subject** (e.g. `Meeting agenda\`) placed next to the PDF.  Each email thread therefore gets its own attachment folder.  ZIP attachments are extracted into a named subfolder inside that folder.
+- Each email's attachments are saved in their original format in a folder named `<subject> attachments` (e.g. `re: window enquiry attachments\`) placed next to the PDF.  Each email thread therefore gets its own clearly-labelled attachment folder.  ZIP attachments are extracted into a named subfolder inside that folder.
