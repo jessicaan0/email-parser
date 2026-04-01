@@ -1,7 +1,9 @@
 ﻿using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Text;
 using EmailParser.Models;
 using EmailParser.Services;
+using Excel = Microsoft.Office.Interop.Excel;
 
 namespace EmailParser;
 
@@ -14,6 +16,16 @@ class Program
         Console.WriteLine("Email Parser — Save Outlook Emails to PDF");
         Console.WriteLine("==========================================");
         Console.WriteLine();
+
+        // =======================================================================
+        // PATH CONFIGURATION
+        // Change these three lines to move files to a different location.
+        // =======================================================================
+        string outputBaseDir     = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "EmailParser");
+        string reportsDir        = @"C:\Users\JessicaAnyanwu\OneDrive - Suir Engineering Ltd\Documents\EmailParser\Email Parcer Directory";
+        string dataDictionaryDir = reportsDir;  // data dictionary lives in the same folder as reports
+        // =======================================================================
 
         // -----------------------------------------------------------------------
         // 1. Resolve the source: an Outlook folder name or a local directory of
@@ -47,7 +59,34 @@ class Program
         bool isMsgDirectory = Directory.Exists(folderPath);
 
         // -----------------------------------------------------------------------
-        // 3. Prepare output directory:  My Documents\EmailParser\<name>
+        // 3. Load the latest Excel data dictionary for terms to strip.
+        // -----------------------------------------------------------------------
+        IReadOnlyList<string> threadPrefixPatterns;
+        try
+        {
+            var dictionary = LoadLatestThreadPrefixDictionary(dataDictionaryDir);
+            threadPrefixPatterns = dictionary.Patterns;
+
+            if (dictionary.SourcePath is null)
+            {
+                Console.WriteLine($"Data dictionary: No Excel file found in '{dictionary.DirectoryPath}'.");
+                Console.WriteLine("                 No terms will be stripped from names.");
+            }
+            else
+            {
+                Console.WriteLine($"Data dictionary: {dictionary.SourcePath}");
+                Console.WriteLine($"Terms loaded   : {threadPrefixPatterns.Count}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error loading Excel data dictionary: {ex.Message}");
+            Environment.Exit(1);
+            return;
+        }
+
+        // -----------------------------------------------------------------------
+        // 4. Prepare output directory:  My Documents\EmailParser\<name>
         // -----------------------------------------------------------------------
         string outputSubDir = isMsgDirectory
             ? SanitizePath(
@@ -55,8 +94,11 @@ class Program
                 ?? "Messages")
             : SanitizePath(folderPath);
 
-        string documentsPath = @"C:\Users\JessicaAnyanwu\DC\ACCDocs\Suir Engineering\Suir Eng Sandbox\Project Files\Jessica\Email tet\test 5";
-        string outputDir = Path.Combine(documentsPath, outputSubDir);
+        outputSubDir = StripThreadPrefixes(outputSubDir, threadPrefixPatterns);
+        if (string.IsNullOrWhiteSpace(outputSubDir))
+            outputSubDir = "Messages";
+
+        string outputDir = Path.Combine(outputBaseDir, outputSubDir);
         Directory.CreateDirectory(outputDir);
 
         if (isMsgDirectory)
@@ -67,12 +109,13 @@ class Program
         Console.WriteLine();
 
         // -----------------------------------------------------------------------
-        // 4. Fetch emails and convert each one to PDF.
+        // 5. Fetch emails and convert each one to PDF.
         // -----------------------------------------------------------------------
         try
         {
+            MsgFileService? msgService = null;
             IEnumerable<EmailData> emails = isMsgDirectory
-                ? new MsgFileService().GetEmailsFromDirectory(folderPath)
+                ? (msgService = new MsgFileService()).GetEmailsFromDirectory(folderPath)
                 : new OutlookService().GetEmailsFromFolder(folderPath);
 
             var pdfService = new PdfService();
@@ -87,6 +130,7 @@ class Program
             foreach (var email in emails)
             {
                 string safeSubject = SanitizeFileName(email.Subject);
+                safeSubject = StripThreadPrefixes(safeSubject, threadPrefixPatterns);
                 if (string.IsNullOrWhiteSpace(safeSubject))
                     safeSubject = "No Subject";
 
@@ -98,7 +142,10 @@ class Program
                                           ?? folderPath;
                     string relativeDir = Path.GetRelativePath(folderPath, sourceFileDir);
                     if (!string.IsNullOrEmpty(relativeDir) && relativeDir != ".")
+                    {
+                        relativeDir = StripThreadPrefixes(relativeDir, threadPrefixPatterns);
                         emailOutputDir = Path.Combine(outputDir, relativeDir);
+                    }
                 }
 
                 Directory.CreateDirectory(emailOutputDir);
@@ -135,12 +182,12 @@ class Program
                     }
                 }
 
-                Console.Write($"  Processing: {email.Subject} ... ");
+                //Console.Write($"  Processing: {email.Subject} ... ");
 
                 try
                 {
                     pdfService.SaveEmailAsPdf(email, outputPath);
-                    Console.WriteLine($"saved → {outputPath}");
+                    //Console.WriteLine($"saved → {outputPath}");
                     processed++;
                 }
                 catch (Exception ex)
@@ -148,6 +195,23 @@ class Program
                     Console.WriteLine("FAILED");
                     Console.Error.WriteLine($"    Error: {ex.Message}");
                     failed++;
+                }
+            }
+
+            if (msgService?.LongPaths.Count > 0)
+            {
+                string reportPath = Path.Combine(reportsDir,
+                    $"LongPaths_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
+                Console.WriteLine(
+                    $"Writing long path report ({msgService.LongPaths.Count} paths over 250 chars)...");
+                try
+                {
+                    WriteLongPathReport(msgService.LongPaths, reportPath);
+                    Console.WriteLine($"Long path report : {reportPath}");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Warning: Could not write long path report: {ex.Message}");
                 }
             }
 
@@ -166,6 +230,8 @@ class Program
                 : $"Fatal error: {ex.Message}");
             Environment.Exit(1);
         }
+        Console.WriteLine("Press any key to exit...");
+        Console.ReadKey();
     }
 
     // -------------------------------------------------------------------------
@@ -175,6 +241,219 @@ class Program
     // Build once; Path.GetInvalidFileNameChars() returns the same values every call.
     private static readonly HashSet<char> InvalidFileNameChars =
         new(Path.GetInvalidFileNameChars());
+
+    private sealed record ThreadPrefixDictionary(string DirectoryPath, string? SourcePath, IReadOnlyList<string> Patterns);
+
+    private static ThreadPrefixDictionary LoadLatestThreadPrefixDictionary(string dictionaryDir)
+    {
+        Directory.CreateDirectory(dictionaryDir);
+
+        string? latestExcelFile = Directory
+            .EnumerateFiles(dictionaryDir)
+            .Where(path =>
+            {
+                string ext = Path.GetExtension(path);
+                return ext.Equals(".xlsx", StringComparison.OrdinalIgnoreCase)
+                    || ext.Equals(".xlsm", StringComparison.OrdinalIgnoreCase)
+                    || ext.Equals(".xls", StringComparison.OrdinalIgnoreCase);
+            })
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+
+        if (latestExcelFile is null)
+            return new ThreadPrefixDictionary(dictionaryDir, null, Array.Empty<string>());
+
+        var patterns = LoadPatternsFromExcel(latestExcelFile);
+        return new ThreadPrefixDictionary(dictionaryDir, latestExcelFile, patterns);
+    }
+
+    private static IReadOnlyList<string> LoadPatternsFromExcel(string excelPath)
+    {
+        Excel.Application? app = null;
+        Excel.Workbooks? workbooks = null;
+        Excel.Workbook? workbook = null;
+        Excel.Sheets? sheets = null;
+        Excel.Worksheet? worksheet = null;
+        Excel.Range? usedRange = null;
+
+        try
+        {
+            app = new Excel.Application { Visible = false, DisplayAlerts = false };
+            workbooks = app.Workbooks;
+            workbook = workbooks.Open(excelPath, ReadOnly: true);
+
+            sheets = workbook.Worksheets;
+            worksheet = (Excel.Worksheet)sheets[1];
+            usedRange = worksheet.UsedRange;
+
+            var values = usedRange.Value2;
+            var patterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (values is object[,] matrix)
+            {
+                foreach (object? value in matrix)
+                {
+                    string candidate = value?.ToString()?.Trim() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(candidate))
+                        patterns.Add(candidate);
+                }
+            }
+            else
+            {
+                string candidate = values?.ToString()?.Trim() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(candidate))
+                    patterns.Add(candidate);
+            }
+
+            return patterns
+                .OrderByDescending(static p => p.Length)
+                .ToArray();
+        }
+        finally
+        {
+            if (workbook is not null)
+                workbook.Close(SaveChanges: false);
+            if (app is not null)
+                app.Quit();
+
+            ReleaseComObject(usedRange);
+            ReleaseComObject(worksheet);
+            ReleaseComObject(sheets);
+            ReleaseComObject(workbook);
+            ReleaseComObject(workbooks);
+            ReleaseComObject(app);
+        }
+    }
+
+    private static void ReleaseComObject(object? comObject)
+    {
+        if (comObject is not null && Marshal.IsComObject(comObject))
+            Marshal.ReleaseComObject(comObject);
+    }
+
+    /// <summary>
+    /// Writes an Excel report listing every file path that exceeded 250 characters.
+    /// Each row shows the full path, its length, and each folder segment in its own
+    /// column so the depth at which paths grow long is immediately visible.
+    /// </summary>
+    private static void WriteLongPathReport(IReadOnlyList<string> longPaths, string outputPath)
+    {
+        // Split each path into directory segments + filename.
+        var rows = longPaths.Select(p => new
+        {
+            FullPath    = p,
+            Length      = p.Length,
+            DirSegments = (Path.GetDirectoryName(p) ?? string.Empty)
+                              .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                                     StringSplitOptions.RemoveEmptyEntries),
+            FileName    = Path.GetFileName(p),
+        }).ToArray();
+
+        int maxDirSegments = rows.Max(r => r.DirSegments.Length);
+        int totalCols      = 2 + maxDirSegments + 1;  // FullPath + Length + dir levels + FileName
+        int totalRows      = rows.Length + 1;          // header + data
+
+        // Build a 2-D object array for a single bulk write — far faster than
+        // setting cells one at a time through the COM boundary.
+        var data = new object[totalRows, totalCols];
+
+        data[0, 0] = "Full Path";
+        data[0, 1] = "Path Length";
+        for (int i = 0; i < maxDirSegments; i++)
+            data[0, 2 + i] = $"Folder Level {i + 1}";
+        data[0, 2 + maxDirSegments] = "File Name";
+
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var r = rows[i];
+            data[i + 1, 0] = r.FullPath;
+            data[i + 1, 1] = r.Length;
+            for (int s = 0; s < r.DirSegments.Length; s++)
+                data[i + 1, 2 + s] = r.DirSegments[s];
+            data[i + 1, 2 + maxDirSegments] = r.FileName;
+        }
+
+        Excel.Application? app       = null;
+        Excel.Workbooks?   workbooks = null;
+        Excel.Workbook?    workbook  = null;
+        Excel.Sheets?      sheets    = null;
+        Excel.Worksheet?   worksheet = null;
+        Excel.Range?       dataRange = null;
+        Excel.Range?       headerRow = null;
+        Excel.Range?       topLeft   = null;
+        Excel.Range?       botRight  = null;
+
+        try
+        {
+            app       = new Excel.Application { Visible = false, DisplayAlerts = false };
+            workbooks = app.Workbooks;
+            workbook  = workbooks.Add();
+            sheets    = workbook.Worksheets;
+            worksheet = (Excel.Worksheet)sheets[1];
+            worksheet.Name = "Long Paths";
+
+            topLeft  = (Excel.Range)worksheet.Cells[1, 1];
+            botRight = (Excel.Range)worksheet.Cells[totalRows, totalCols];
+            dataRange = worksheet.Range[topLeft, botRight];
+            dataRange.Value2 = data;
+
+            // Bold the header row and auto-fit all columns.
+            headerRow = (Excel.Range)worksheet.Rows[1];
+            headerRow.Font.Bold = true;
+            dataRange.Columns.AutoFit();
+
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            workbook.SaveAs(outputPath, Excel.XlFileFormat.xlOpenXMLWorkbook);
+        }
+        finally
+        {
+            workbook?.Close(SaveChanges: false);
+            app?.Quit();
+
+            ReleaseComObject(headerRow);
+            ReleaseComObject(dataRange);
+            ReleaseComObject(topLeft);
+            ReleaseComObject(botRight);
+            ReleaseComObject(worksheet);
+            ReleaseComObject(sheets);
+            ReleaseComObject(workbook);
+            ReleaseComObject(workbooks);
+            ReleaseComObject(app);
+        }
+    }
+
+    /// <summary>
+    /// Strips prefixes and patterns from the subject or folder name.
+    /// Patterns are matched case-insensitively at the start of the string.
+    /// </summary>
+    private static string StripThreadPrefixes(string? text, IReadOnlyList<string> patterns)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        string result = text.Trim();
+
+        // Repeatedly strip prefixes until none match (to handle multiple prefixes).
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (string pattern in patterns)
+            {
+                if (result.StartsWith(pattern, StringComparison.OrdinalIgnoreCase))
+                {
+                    result = result.Substring(pattern.Length).Trim();
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        // If normalization leaves leading separators/spaces, remove them.
+        result = result.TrimStart(' ', '-', '_').Trim();
+
+        return result;
+    }
 
     /// <summary>
     /// Removes characters that are invalid in file names.
@@ -189,12 +468,35 @@ class Program
     }
 
     /// <summary>
-    /// Converts an Outlook folder path (e.g. "Inbox/Projects") into a safe
-    /// relative path for use as a directory name, replacing path separators
-    /// with OS-appropriate directory separators.
+    /// Converts a folder path (e.g. "Inbox/Projects" or an absolute file-system
+    /// path) into a safe relative path for use as a directory name.
+    /// For absolute paths the generic OS prefix is stripped first:
+    ///   - Paths under the current user profile lose the C:\Users\&lt;username&gt; prefix.
+    ///   - All other rooted paths lose the drive root (e.g. "C:\").
     /// </summary>
     private static string SanitizePath(string folderPath)
     {
+        // Strip generic OS prefix from absolute paths so that segments like
+        // "C:", "Users" and the username never appear in the output folder name.
+        if (Path.IsPathRooted(folderPath))
+        {
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string fullPath = Path.GetFullPath(folderPath);
+
+            if (fullPath.StartsWith(userProfile, StringComparison.OrdinalIgnoreCase))
+            {
+                // e.g. C:\Users\Jessica\Documents\emails → Documents\emails
+                folderPath = Path.GetRelativePath(userProfile, fullPath);
+            }
+            else
+            {
+                // e.g. D:\ProjectFiles\emails → ProjectFiles\emails
+                string? root = Path.GetPathRoot(fullPath);
+                if (!string.IsNullOrEmpty(root))
+                    folderPath = fullPath.Substring(root.Length);
+            }
+        }
+
         // Replace forward and back slashes with the OS directory separator,
         // then sanitize each segment individually.
         string[] segments = folderPath.Split(new[] { '/', '\\' },
@@ -214,7 +516,8 @@ class Program
     /// <summary>
     /// Copies every attachment in <paramref name="email"/> to
     /// <paramref name="attachmentsDir"/> in its original format.
-    /// ZIP attachments are extracted into a subfolder named after the archive.
+    /// ZIP attachments are extracted directly into <paramref name="attachmentsDir"/>
+    /// with no folder structure preserved.
     /// </summary>
     private static void SaveAttachmentsToFolder(EmailData email, string attachmentsDir)
     {
@@ -229,14 +532,8 @@ class Program
 
             if (string.Equals(ext, ".zip", StringComparison.OrdinalIgnoreCase))
             {
-                // Extract the ZIP into a subfolder named after the archive.
-                string zipFolderName = SanitizeFileName(
-                    Path.GetFileNameWithoutExtension(attachment.FileName));
-                if (string.IsNullOrWhiteSpace(zipFolderName))
-                    zipFolderName = "archive";
-
-                string zipExtractDir = GetUniqueDirectoryPath(attachmentsDir, zipFolderName);
-                ExtractZipToFolder(attachment.TempFilePath, zipExtractDir);
+                // Extract ZIP contents directly into the attachments folder.
+                ExtractZipToFolder(attachment.TempFilePath, attachmentsDir);
             }
             else
             {
@@ -252,13 +549,11 @@ class Program
 
     /// <summary>
     /// Extracts a ZIP archive to <paramref name="extractDir"/> using a
-    /// zip-slip safe extraction strategy.
+    /// zip-slip safe strategy and flattens all files into a single folder.
     /// </summary>
     private static void ExtractZipToFolder(string zipPath, string extractDir)
     {
         Directory.CreateDirectory(extractDir);
-        string canonicalExtractDir = Path.GetFullPath(extractDir)
-            + Path.DirectorySeparatorChar;
 
         try
         {
@@ -269,20 +564,13 @@ class Program
                 if (string.IsNullOrEmpty(entry.Name))
                     continue;
 
-                string destPath = Path.GetFullPath(
-                    Path.Combine(extractDir, entry.FullName));
+                // Flatten: ignore any subfolder path in the ZIP entry.
+                string safeFileName = SanitizeFileName(entry.Name);
+                if (string.IsNullOrWhiteSpace(safeFileName))
+                    safeFileName = "file";
 
-                // Zip-slip guard: skip entries that escape the target directory.
-                if (!destPath.StartsWith(canonicalExtractDir,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.Error.WriteLine(
-                        $"  Warning: Skipping ZIP entry with unsafe path: '{entry.FullName}'");
-                    continue;
-                }
-
-                Directory.CreateDirectory(Path.GetDirectoryName(destPath) ?? extractDir);
-                entry.ExtractToFile(destPath, overwrite: true);
+                string destPath = GetUniqueFilePath(extractDir, safeFileName);
+                entry.ExtractToFile(destPath, overwrite: false);
             }
         }
         catch (Exception ex)

@@ -9,15 +9,13 @@ namespace EmailParser.Services;
 /// </summary>
 public class PdfService
 {
-    private readonly AttachmentProcessor _attachmentProcessor = new();
-
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Renders <paramref name="email"/> and all of its attachments to a single PDF
-    /// at <paramref name="outputPath"/>.
+    /// Renders <paramref name="email"/> body to a PDF at <paramref name="outputPath"/>.
+    /// Attachments are saved separately in their original format.
     /// </summary>
     public void SaveEmailAsPdf(EmailData email, string outputPath)
     {
@@ -25,7 +23,7 @@ public class PdfService
 
         try
         {
-            // 1. Convert the email body to a temporary PDF.
+            // Convert the email body to a PDF.
             string bodyPdf = Path.Combine(
                 Path.GetTempPath(),
                 $"ep_{Path.GetRandomFileName()}.pdf");
@@ -33,23 +31,12 @@ public class PdfService
 
             ConvertEmailBodyToPdf(email, bodyPdf);
 
-            // 2. Convert each attachment to one or more temporary PDFs.
-            var attachmentPdfs = new List<string>();
-            foreach (AttachmentData attachment in email.Attachments)
-            {
-                IReadOnlyList<string> pdfs = _attachmentProcessor.ProcessAttachment(attachment);
-                attachmentPdfs.AddRange(pdfs);
-                tempFilesToDelete.AddRange(pdfs);
-            }
-
-            // 3. Merge body + attachment PDFs into the final output file.
-            var allPdfs = new List<string>(attachmentPdfs.Count + 1) { bodyPdf };
-            allPdfs.AddRange(attachmentPdfs);
-            MergePdfs(allPdfs, outputPath);
+            // Copy the body PDF to the output path.
+            File.Copy(bodyPdf, outputPath, overwrite: true);
         }
         finally
         {
-            // Clean up all temporary PDFs created during conversion.
+            // Clean up all temporary PDFs.
             foreach (string tmp in tempFilesToDelete)
                 TryDeleteFile(tmp);
 
@@ -106,34 +93,6 @@ public class PdfService
             </body>
             </html>
             """;
-    }
-
-    // -------------------------------------------------------------------------
-    // PDF merging
-    // -------------------------------------------------------------------------
-
-    private static void MergePdfs(IList<string> inputPaths, string outputPath)
-    {
-        using var writer = new PdfWriter(outputPath);
-        using var outputPdf = new PdfDocument(writer);
-
-        foreach (string inputPath in inputPaths)
-        {
-            if (!File.Exists(inputPath))
-                continue;
-
-            try
-            {
-                using var reader = new PdfReader(inputPath);
-                using var inputPdf = new PdfDocument(reader);
-                inputPdf.CopyPagesTo(1, inputPdf.GetNumberOfPages(), outputPdf);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(
-                    $"  Warning: Could not merge '{inputPath}': {ex.Message}");
-            }
-        }
     }
 
     // -------------------------------------------------------------------------

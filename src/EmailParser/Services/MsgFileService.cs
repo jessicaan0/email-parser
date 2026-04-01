@@ -9,6 +9,14 @@ namespace EmailParser.Services;
 /// </summary>
 public class MsgFileService
 {
+    private readonly List<string> _longPaths = [];
+
+    /// <summary>
+    /// File paths longer than 250 characters discovered during
+    /// <see cref="GetEmailsFromDirectory"/>. Written to an Excel report by the caller.
+    /// </summary>
+    public IReadOnlyList<string> LongPaths => _longPaths;
+
     /// <summary>
     /// Returns all emails parsed from .msg files found inside
     /// <paramref name="directoryPath"/> and its subdirectories. Files that
@@ -30,6 +38,9 @@ public class MsgFileService
 
         foreach (string msgFile in msgFiles)
         {
+            if (msgFile.Length > 250)
+                _longPaths.Add(msgFile);
+
             EmailData email;
             try
             {
@@ -38,7 +49,10 @@ public class MsgFileService
             catch (Exception ex)
             {
                 Console.Error.WriteLine(
-                    $"Warning: Could not read '{Path.GetFileName(msgFile)}': {ex.Message}");
+                    $"Warning: Could not read '{msgFile}': [{ex.GetType().Name}] {ex.Message}");
+                if (ex.InnerException is not null)
+                    Console.Error.WriteLine(
+                        $"         Inner: [{ex.InnerException.GetType().Name}] {ex.InnerException.Message}");
                 continue;
             }
 
