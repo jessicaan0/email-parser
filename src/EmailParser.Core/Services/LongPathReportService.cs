@@ -1,8 +1,8 @@
-using EmailParser.Helpers;
+using EmailParser.Core.Helpers;
 using Serilog;
 using Excel = Microsoft.Office.Interop.Excel;
 
-namespace EmailParser.Services;
+namespace EmailParser.Core.Services;
 
 /// <summary>
 /// Writes an Excel report listing file paths that exceed a configurable

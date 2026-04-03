@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/EmailParser/EmailParser.csproj" />
+    <Project Path="src/EmailParser.Core/EmailParser.Core.csproj" />
   </Folder>
 </Solution>

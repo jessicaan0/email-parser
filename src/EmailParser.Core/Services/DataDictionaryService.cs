@@ -1,10 +1,10 @@
 using System.Runtime.InteropServices;
-using EmailParser.Helpers;
-using EmailParser.Models;
+using EmailParser.Core.Helpers;
+using EmailParser.Core.Models;
 using Serilog;
 using Excel = Microsoft.Office.Interop.Excel;
 
-namespace EmailParser.Services;
+namespace EmailParser.Core.Services;
 
 /// <summary>
 /// Loads term patterns from an Excel data-dictionary file. The patterns are

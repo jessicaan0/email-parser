@@ -1,9 +1,9 @@
 using System.Runtime.InteropServices;
-using EmailParser.Models;
+using EmailParser.Core.Models;
 using Microsoft.Office.Interop.Outlook;
 using Serilog;
 
-namespace EmailParser.Services;
+namespace EmailParser.Core.Services;
 
 /// <summary>
 /// Reads emails from a specified Outlook folder using the Outlook COM interop API.

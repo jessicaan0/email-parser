@@ -1,4 +1,4 @@
-namespace EmailParser.Models;
+namespace EmailParser.Core.Models;
 
 /// <summary>
 /// Represents a loaded data dictionary: the directory it was found in,

@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using System.Runtime.InteropServices;
-using EmailParser.Models;
+using EmailParser.Core.Models;
 using iText.IO.Image;
 using iText.Kernel.Geom;
 using iText.Kernel.Pdf;
@@ -10,7 +10,7 @@ using Microsoft.Office.Interop.Excel;
 using Microsoft.Office.Interop.Word;
 using Serilog;
 
-namespace EmailParser.Services;
+namespace EmailParser.Core.Services;
 
 /// <summary>
 /// Converts email attachments (images, Word, Excel, PDF, ZIP) into one or more

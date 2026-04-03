@@ -1,8 +1,8 @@
-using EmailParser.Models;
+using EmailParser.Core.Models;
 using MsgReader.Outlook;
 using Serilog;
 
-namespace EmailParser.Services;
+namespace EmailParser.Core.Services;
 
 /// <summary>
 /// Reads emails from Outlook .msg files stored in a local directory, without

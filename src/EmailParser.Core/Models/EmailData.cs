@@ -1,4 +1,4 @@
-namespace EmailParser.Models;
+namespace EmailParser.Core.Models;
 
 /// <summary>
 /// Represents an email fetched from Outlook.
