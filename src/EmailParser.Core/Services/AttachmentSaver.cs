@@ -1,9 +1,9 @@
 using System.IO.Compression;
-using EmailParser.Helpers;
-using EmailParser.Models;
+using EmailParser.Core.Helpers;
+using EmailParser.Core.Models;
 using Serilog;
 
-namespace EmailParser.Services;
+namespace EmailParser.Core.Services;
 
 /// <summary>
 /// Saves email attachments to an output folder in their original format.

@@ -1,12 +1,12 @@
 using System.Runtime.InteropServices;
 
-namespace EmailParser.Services;
+namespace EmailParser.Core.Services;
 
 /// <summary>
 /// Helpers for detecting whether a Microsoft Office component is available
 /// on the current machine.
 /// </summary>
-internal static class OfficeAvailability
+public static class OfficeAvailability
 {
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="ex"/> indicates that a
@@ -26,7 +26,7 @@ internal static class OfficeAvailability
     /// The check recurses into <see cref="Exception.InnerException"/> so that wrapper
     /// exceptions (e.g. <see cref="InvalidOperationException"/>) are also matched.
     /// </remarks>
-    internal static bool IsOfficeUnavailableException(Exception ex)
+    public static bool IsOfficeUnavailableException(Exception ex)
     {
         if (ex is TypeLoadException or FileNotFoundException or FileLoadException
                 or BadImageFormatException)

@@ -1,9 +1,9 @@
-using EmailParser.Models;
+using EmailParser.Core.Models;
 using iText.Html2pdf;
 using iText.Kernel.Pdf;
 using Serilog;
 
-namespace EmailParser.Services;
+namespace EmailParser.Core.Services;
 
 /// <summary>
 /// Converts an <see cref="EmailData"/> (body + attachments) into a single PDF file.

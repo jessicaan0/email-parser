@@ -1,10 +1,10 @@
-namespace EmailParser.Helpers;
+namespace EmailParser.Core.Helpers;
 
 /// <summary>
 /// Utility methods for sanitising file and folder names and stripping
 /// data-dictionary terms from paths.
 /// </summary>
-internal static class FileNameHelper
+public static class FileNameHelper
 {
     // Build once; Path.GetInvalidFileNameChars() returns the same values every call.
     private static readonly HashSet<char> InvalidFileNameChars =
@@ -13,7 +13,7 @@ internal static class FileNameHelper
     /// <summary>
     /// Replaces characters that are invalid in file names with underscores.
     /// </summary>
-    internal static string SanitizeFileName(string? name)
+    public static string SanitizeFileName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
             return "No Subject";
@@ -27,7 +27,7 @@ internal static class FileNameHelper
     /// For absolute paths, strips the drive root and user-profile prefix so that
     /// "C:", "Users", and the username never appear in the output folder name.
     /// </summary>
-    internal static string SanitizePath(string folderPath)
+    public static string SanitizePath(string folderPath)
     {
         if (Path.IsPathRooted(folderPath))
         {
@@ -60,7 +60,7 @@ internal static class FileNameHelper
     /// Strips every dictionary term from a file/folder name (case-insensitive),
     /// then collapses runs of whitespace and trims leading separators.
     /// </summary>
-    internal static string StripDictionaryTerms(string? text, IReadOnlyList<string> patterns)
+    public static string StripDictionaryTerms(string? text, IReadOnlyList<string> patterns)
     {
         if (string.IsNullOrWhiteSpace(text))
             return string.Empty;
@@ -84,7 +84,7 @@ internal static class FileNameHelper
     /// Returns a unique file path inside <paramref name="directory"/>; appends a
     /// counter if the name is already taken.
     /// </summary>
-    internal static string GetUniqueFilePath(string directory, string fileName)
+    public static string GetUniqueFilePath(string directory, string fileName)
     {
         string dest = Path.Combine(directory, fileName);
         if (!File.Exists(dest))
