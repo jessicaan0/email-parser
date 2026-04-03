@@ -136,9 +136,10 @@ public sealed partial class MainWindow : Window
 
     private void OnLogEntryAdded()
     {
-        if (LogListView.Items.Count > 0)
+        var count = LogListView.Items.Count;
+        if (count > 0)
         {
-            LogListView.ScrollIntoView(LogListView.Items[^1]);
+            LogListView.ScrollIntoView(LogListView.Items[count - 1]);
         }
     }
 }

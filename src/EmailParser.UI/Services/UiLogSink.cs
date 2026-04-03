@@ -31,9 +31,9 @@ public sealed class UiLogSink : ILogEventSink
 
     public void Emit(LogEvent logEvent)
     {
-        var message = logEvent.RenderMessage();
-        if (logEvent.Exception != null)
-            message += Environment.NewLine + logEvent.Exception;
+        var message = logEvent.Exception != null
+            ? string.Concat(logEvent.RenderMessage(), Environment.NewLine, logEvent.Exception)
+            : logEvent.RenderMessage();
 
         var entry = new LogEntry
         {
